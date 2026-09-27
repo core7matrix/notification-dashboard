@@ -251,19 +251,24 @@ export default function Dashboard() {
     <section className="app">
       <aside className="sidebar">
         <div className="brand">
-          <span>Notifications</span>
-          <span
-            className={`dot ${connected ? 'online' : 'offline'}`}
-            title={connected ? 'Connected' : 'Disconnected - reconnecting'}
-          />
+          <span className="brand-logo">N</span>
+          <div className="brand-text">
+            <span className="brand-name">Notifications</span>
+            <span className="brand-status">
+              <span className={`dot ${connected ? 'online' : 'offline'}`} />
+              {connected ? 'Live' : 'Reconnecting…'}
+            </span>
+          </div>
         </div>
         <nav className="vps-list">
+          <div className="section-label">Machines</div>
           {vpsEntries.map((v) => (
             <div
               key={v.label ? 'all' : `vps:${v.vps}`}
-              className={`vps-item ${selectedVps === v.vps ? 'active' : ''}`}
+              className={`vps-item ${selectedVps === v.vps ? 'active' : ''} ${v.unread ? 'has-unread' : ''}`}
               onClick={() => setSelectedVps(v.vps)}
             >
+              <span className="vps-icon">{v.label ? '◎' : '#'}</span>
               <span className="name">{v.label || v.vps}</span>
               {v.lastAt ? <span className="meta">{timeAgo(v.lastAt)}</span> : null}
               {v.unread ? <span className="badge">{v.unread}</span> : null}
