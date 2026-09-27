@@ -310,6 +310,8 @@ export default function Dashboard() {
               prev.vps === n.vps &&
               prev.app === n.app &&
               prev.title === n.title &&
+              prev.pageTitle === n.pageTitle &&
+              prev.source === n.source &&
               prev.receivedAt - n.receivedAt < GROUP_WINDOW;
             return (
               <Fragment key={n.id}>
@@ -368,13 +370,41 @@ function Item({ n, grouped, flash, onClick }) {
               {clockTime(n.receivedAt)}
             </time>
             <span className="chips">
-              <span className="chip">{n.vps}</span>
-              <span className="chip">{n.app}</span>
+              <span className="chip" title="VPS">{n.vps}</span>
+              <span className="chip" title="App">{n.app}</span>
             </span>
           </div>
         )}
-        {n.body && <div className="body">{n.body}</div>}
+        {!grouped && n.pageTitle && (
+          <div className="meta-line">
+            <span className="meta-item" title="Page title">
+              <PageIcon />
+              {n.url ? (
+                <a href={n.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                  {n.pageTitle}
+                </a>
+              ) : (
+                <span className="meta-text">{n.pageTitle}</span>
+              )}
+            </span>
+          </div>
+        )}
+        {n.body && (
+          <div>
+            <span className="body-badge">{n.body}</span>
+          </div>
+        )}
+        {n.source && <div className="bubble">{n.source}</div>}
       </div>
     </li>
+  );
+}
+
+function PageIcon() {
+  return (
+    <svg className="meta-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4 1.5h5.5L13 5v9.5H4z" />
+      <path d="M9.5 1.5V5H13" />
+    </svg>
   );
 }

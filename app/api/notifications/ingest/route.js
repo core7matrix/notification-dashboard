@@ -27,6 +27,7 @@ function normalize(input, ord) {
     url: optUrl(input.url),
     tag: str(input.tag, 200) || null,
     source: str(input.source, 50) || null,
+    page_title: str(input.pageTitle, 300) || null,
     captured_at: Number.isSafeInteger(capturedAt) ? capturedAt : Date.now(),
     received_at: Date.now(),
   };
@@ -51,11 +52,11 @@ export async function POST(req) {
 
   const sql = await getDb();
   const inserted = await sql`
-    INSERT INTO notifications (id, client_id, vps, app, title, body, icon, url, tag, source, captured_at, received_at)
-    SELECT id, client_id, vps, app, title, body, icon, url, tag, source, captured_at, received_at
+    INSERT INTO notifications (id, client_id, vps, app, title, body, icon, url, tag, source, page_title, captured_at, received_at)
+    SELECT id, client_id, vps, app, title, body, icon, url, tag, source, page_title, captured_at, received_at
     FROM json_to_recordset(${JSON.stringify(rows)}::json) AS x(
       ord int, id uuid, client_id text, vps text, app text, title text, body text,
-      icon text, url text, tag text, source text, captured_at bigint, received_at bigint
+      icon text, url text, tag text, source text, page_title text, captured_at bigint, received_at bigint
     )
     ORDER BY ord
     ON CONFLICT DO NOTHING
