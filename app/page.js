@@ -8,6 +8,7 @@ const PUSHER_KEY = process.env.NEXT_PUBLIC_PUSHER_KEY;
 const PUSHER_CLUSTER = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
 const POLL_INTERVAL = 5000;
 const GROUP_WINDOW = 5 * 60 * 1000;
+const VPS_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'];
 const AVATAR_COLORS = ['#4a154b', '#1264a3', '#2bac76', '#e01e5a', '#b7791f', '#0b7a75', '#6d28d9', '#c2410c'];
 
 const prefs = {
@@ -60,11 +61,14 @@ function initials(name) {
   return letters.join('').toUpperCase() || '?';
 }
 
-function avatarColor(name) {
+function pickColor(name, palette) {
   let hash = 0;
   for (const c of String(name)) hash = (hash * 31 + c.charCodeAt(0)) | 0;
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return palette[Math.abs(hash) % palette.length];
 }
+
+const avatarColor = (name) => pickColor(name, AVATAR_COLORS);
+const vpsColor = (name) => pickColor(name, VPS_COLORS);
 
 let audioCtx;
 function beep() {
@@ -266,9 +270,24 @@ export default function Dashboard() {
             <div
               key={v.label ? 'all' : `vps:${v.vps}`}
               className={`vps-item ${selectedVps === v.vps ? 'active' : ''} ${v.unread ? 'has-unread' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-current={selectedVps === v.vps ? 'page' : undefined}
               onClick={() => setSelectedVps(v.vps)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedVps(v.vps);
+                }
+              }}
             >
-              <span className="vps-icon">{v.label ? '◎' : '#'}</span>
+              {v.label ? (
+                <span className="vps-icon all">◎</span>
+              ) : (
+                <span className="vps-icon" style={{ background: vpsColor(v.vps) }}>
+                  {v.vps.charAt(0).toUpperCase()}
+                </span>
+              )}
               <span className="name">{v.label || v.vps}</span>
               {v.lastAt ? <span className="meta">{timeAgo(v.lastAt)}</span> : null}
               {v.unread ? <span className="badge">{v.unread}</span> : null}
@@ -370,7 +389,7 @@ function Item({ n, grouped, flash, onClick }) {
       <div className="content">
         {!grouped && (
           <div className="head">
-            <span className="name">{n.title || n.app}</span>
+            <span className="sender">{n.title || n.app}</span>
             <time className="time" title={fullDate}>
               {clockTime(n.receivedAt)}
             </time>
