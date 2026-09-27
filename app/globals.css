@@ -503,7 +503,7 @@ button.danger {
   max-width: min(100%, 720px);
   margin: 2px 0;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 10px;
   background: #e8f1fb;
   color: #0b4f8a;
   font-size: 12.5px;
