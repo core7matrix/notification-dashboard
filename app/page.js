@@ -1,12 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Pusher from 'pusher-js';
 import { CHANNEL, EVENT } from '@/lib/channel';
 
 const PUSHER_KEY = process.env.NEXT_PUBLIC_PUSHER_KEY;
 const PUSHER_CLUSTER = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
 const POLL_INTERVAL = 5000;
+const GROUP_WINDOW = 5 * 60 * 1000;
+const AVATAR_COLORS = ['#4a154b', '#1264a3', '#2bac76', '#e01e5a', '#b7791f', '#0b7a75', '#6d28d9', '#c2410c'];
 
 const prefs = {
   get desktop() {
@@ -29,6 +31,39 @@ function timeAgo(ts) {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return new Date(ts).toLocaleString();
+}
+
+function clockTime(ts, withPeriod = true) {
+  const s = new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return withPeriod ? s : s.replace(/\s?[AP]M$/i, '');
+}
+
+const dayKey = (ts) => new Date(ts).toDateString();
+
+function dayLabel(ts) {
+  const d = new Date(ts);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (dayKey(d) === dayKey(today)) return 'Today';
+  if (dayKey(d) === dayKey(yesterday)) return 'Yesterday';
+  return d.toLocaleDateString([], {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric',
+  });
+}
+
+function initials(name) {
+  const letters = String(name).trim().split(/\s+/).slice(0, 2).map((w) => w[0]);
+  return letters.join('').toUpperCase() || '?';
+}
+
+function avatarColor(name) {
+  let hash = 0;
+  for (const c of String(name)) hash = (hash * 31 + c.charCodeAt(0)) | 0;
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 let audioCtx;
@@ -267,14 +302,31 @@ export default function Dashboard() {
           </button>
         </header>
         <ul className="list">
-          {filtered.map((n) => (
-            <Item
-              key={n.id}
-              n={n}
-              flash={flashIds.has(n.id)}
-              onClick={() => !n.read && markRead({ ids: [n.id] })}
-            />
-          ))}
+          {filtered.map((n, i) => {
+            const prev = filtered[i - 1];
+            const newDay = !prev || dayKey(prev.receivedAt) !== dayKey(n.receivedAt);
+            const grouped =
+              !newDay &&
+              prev.vps === n.vps &&
+              prev.app === n.app &&
+              prev.title === n.title &&
+              prev.receivedAt - n.receivedAt < GROUP_WINDOW;
+            return (
+              <Fragment key={n.id}>
+                {newDay && (
+                  <li className="day-divider">
+                    <span>{dayLabel(n.receivedAt)}</span>
+                  </li>
+                )}
+                <Item
+                  n={n}
+                  grouped={grouped}
+                  flash={flashIds.has(n.id)}
+                  onClick={() => !n.read && markRead({ ids: [n.id] })}
+                />
+              </Fragment>
+            );
+          })}
         </ul>
         {filtered.length === 0 && <div className="empty">No notifications yet.</div>}
       </main>
@@ -282,23 +334,46 @@ export default function Dashboard() {
   );
 }
 
-function Item({ n, flash, onClick }) {
-  const [iconBroken, setIconBroken] = useState(false);
+function Avatar({ n }) {
+  const [broken, setBroken] = useState(false);
+  const name = n.title || n.app;
+  if (n.icon && !broken) {
+    return <img className="avatar" src={n.icon} referrerPolicy="no-referrer" alt="" onError={() => setBroken(true)} />;
+  }
   return (
-    <li className={`item ${n.read ? '' : 'unread'} ${flash ? 'flash' : ''}`} onClick={onClick}>
-      {n.icon && !iconBroken ? (
-        <img src={n.icon} referrerPolicy="no-referrer" alt="" onError={() => setIconBroken(true)} />
-      ) : (
-        <div className="avatar" />
-      )}
+    <div className="avatar" style={{ background: avatarColor(name) }}>
+      {initials(name)}
+    </div>
+  );
+}
+
+function Item({ n, grouped, flash, onClick }) {
+  const fullDate = new Date(n.receivedAt).toLocaleString();
+  return (
+    <li className={`msg ${grouped ? 'grouped' : ''} ${n.read ? '' : 'unread'} ${flash ? 'flash' : ''}`} onClick={onClick}>
+      <div className="gutter">
+        {grouped ? (
+          <time className="hover-time" title={fullDate}>
+            {clockTime(n.receivedAt, false)}
+          </time>
+        ) : (
+          <Avatar n={n} />
+        )}
+      </div>
       <div className="content">
-        <div className="head">
-          <span className="title">{n.title}</span>
-          <span className="tag">{n.vps}</span>
-          <span className="tag app">{n.app}</span>
-          <span className="time">{timeAgo(n.receivedAt)}</span>
-        </div>
-        <div className="body">{n.body}</div>
+        {!grouped && (
+          <div className="head">
+            <span className="name">{n.title || n.app}</span>
+            <time className="time" title={fullDate}>
+              {clockTime(n.receivedAt)}
+            </time>
+            <span className="chips">
+              <span className="chip">{n.vps}</span>
+              <span className="chip">{n.app}</span>
+            </span>
+          </div>
+        )}
+        {n.body && <div className="body">{n.body}</div>}
       </div>
     </li>
   );
