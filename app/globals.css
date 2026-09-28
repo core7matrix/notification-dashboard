@@ -464,10 +464,6 @@ button {
   --mn-chip-soft: #f3f4f6;
   --mn-badge-text: #1e40af;
   --mn-badge-unread: #e2eaff;
-  --mn-bubble: #f5f6f8;
-  --mn-bubble-border: #eceef1;
-  --mn-bubble-text: #2d333b;
-  --mn-bubble-unread-border: #dbe4fb;
   --mn-divider-bg: rgb(250 251 252 / 92%);
   color-scheme: light;
   flex: 1;
@@ -700,7 +696,7 @@ button {
   position: relative;
   display: flex;
   gap: 12px;
-  padding: 10px 20px;
+  padding: 16px 20px;
   cursor: pointer;
   transition: background 0.12s;
 }
@@ -708,6 +704,10 @@ button {
 .msg.grouped {
   padding-top: 2px;
   padding-bottom: 4px;
+}
+
+.msg:not(.grouped):has(+ .msg.grouped) {
+  padding-bottom: 10px;
 }
 
 .msg:hover {
@@ -834,6 +834,12 @@ button {
   color: var(--mn-muted);
 }
 
+.app-logo {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
 .chip-dot {
   width: 6px;
   height: 6px;
@@ -894,7 +900,7 @@ button {
   border-radius: 6px;
   background: var(--mn-accent-soft);
   color: var(--mn-badge-text);
-  font-size: 12.5px;
+  font-size: 14.5px;
   font-weight: 500;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -905,29 +911,15 @@ button {
   background: var(--mn-badge-unread);
 }
 
-.bubble {
+.source-line {
+  float: right;
+  margin: 2px 0 0 8px;
+}
+
+.content::after {
+  content: '';
   display: block;
-  width: fit-content;
-  max-width: min(100%, 760px);
-  margin-top: 4px;
-  padding: 8px 12px;
-  border-radius: 4px 10px 10px 10px;
-  background: var(--mn-bubble);
-  border: 1px solid var(--mn-bubble-border);
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--mn-bubble-text);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.msg.unread .bubble {
-  background: var(--mn-surface);
-  border-color: var(--mn-bubble-unread-border);
-}
-
-.msg.grouped .bubble {
-  border-radius: 10px;
+  clear: both;
 }
 
 .day-divider {
@@ -1027,10 +1019,6 @@ button {
   --mn-chip-soft: #1d2129;
   --mn-badge-text: #bccdff;
   --mn-badge-unread: rgb(107 147 255 / 22%);
-  --mn-bubble: #1a1e26;
-  --mn-bubble-border: #262a33;
-  --mn-bubble-text: #d7dbe2;
-  --mn-bubble-unread-border: #2c3a5e;
   --mn-divider-bg: rgb(20 23 30 / 90%);
   color-scheme: dark;
 }
