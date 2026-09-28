@@ -123,6 +123,7 @@ export default function Dashboard() {
   const [connected, setConnected] = useState(false);
   const [desktop, setDesktop] = useState(false);
   const [sound, setSound] = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [, setTick] = useState(0);
   const itemsRef = useRef([]);
   const loadedRef = useRef(false);
@@ -230,8 +231,7 @@ export default function Dashboard() {
   }
 
   function clearAll() {
-    const scope = selectedVps ? `all notifications from ${selectedVps}` : 'ALL notifications';
-    if (!confirm(`Delete ${scope}?`)) return;
+    setConfirmClear(false);
     const q = selectedVps ? `?vps=${encodeURIComponent(selectedVps)}` : '';
     api(`/api/notifications${q}`, { method: 'DELETE' }).catch(console.error);
   }
@@ -402,7 +402,7 @@ export default function Dashboard() {
               <CheckIcon />
               Mark all read
             </button>
-            <button className="btn danger" disabled={!scoped.length} onClick={clearAll} title="Delete notifications">
+            <button className="btn danger" disabled={!scoped.length} onClick={() => setConfirmClear(true)} title="Delete notifications">
               <TrashIcon />
               Clear
             </button>
@@ -464,7 +464,60 @@ export default function Dashboard() {
           )}
         </div>
       </main>
+      {confirmClear && (
+        <ConfirmModal
+          title="Delete notifications?"
+          message={
+            selectedVps ? (
+              <>
+                All notifications from <strong>{selectedVps}</strong> will be permanently deleted.
+              </>
+            ) : (
+              'All notifications from every machine will be permanently deleted.'
+            )
+          }
+          confirmLabel="Delete"
+          onConfirm={clearAll}
+          onCancel={() => setConfirmClear(false)}
+        />
+      )}
     </section>
+  );
+}
+
+function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onCancel();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div
+        className="modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-icon">
+          <TrashIcon />
+        </div>
+        <h2 id="modal-title" className="modal-title">
+          {title}
+        </h2>
+        <p className="modal-message">{message}</p>
+        <div className="modal-actions">
+          <button className="btn" onClick={onCancel} autoFocus>
+            Cancel
+          </button>
+          <button className="btn danger-solid" onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
