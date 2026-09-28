@@ -113,6 +113,7 @@ export default function Dashboard() {
   const [vps, setVps] = useState([]);
   const [selectedVps, setSelectedVps] = useState('');
   const [selectedApp, setSelectedApp] = useState('');
+  const [vpsQuery, setVpsQuery] = useState('');
   const [flashIds, setFlashIds] = useState(() => new Set());
   const [connected, setConnected] = useState(false);
   const [desktop, setDesktop] = useState(false);
@@ -212,7 +213,9 @@ export default function Dashboard() {
   const apps = [...new Set(items.map((n) => n.app))].sort();
   const appFilter = apps.includes(selectedApp) ? selectedApp : '';
   const filtered = items.filter((n) => (!selectedVps || n.vps === selectedVps) && (!appFilter || n.app === appFilter));
-  const vpsEntries = [{ vps: '', label: 'All VPS', unread: totalUnread, lastAt: 0 }, ...vps];
+  const allEntry = { vps: '', label: 'All machines', unread: totalUnread, lastAt: 0 };
+  const vpsNeedle = vpsQuery.trim().toLowerCase();
+  const visibleVps = vpsNeedle ? vps.filter((v) => v.vps.toLowerCase().includes(vpsNeedle)) : vps;
 
   function markRead(body) {
     api('/api/notifications/read', { method: 'POST', body: JSON.stringify(body) }).catch(console.error);
@@ -255,60 +258,74 @@ export default function Dashboard() {
     <section className="app">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-logo">N</span>
+          <span className="brand-logo">
+            <BellIcon />
+          </span>
           <div className="brand-text">
             <span className="brand-name">Notifications</span>
-            <span className="brand-status">
-              <span className={`dot ${connected ? 'online' : 'offline'}`} />
-              {connected ? 'Live' : 'Reconnecting…'}
-            </span>
+            <span className="brand-sub">Monitoring console</span>
+          </div>
+          <span className={`status-pill ${connected ? 'online' : 'offline'}`} title={connected ? 'Connected' : 'Reconnecting…'}>
+            <span className="dot" />
+            {connected ? 'Live' : 'Offline'}
+          </span>
+        </div>
+
+        <div className="sidebar-stats">
+          <div className="stat">
+            <span className="stat-value">{totalUnread}</span>
+            <span className="stat-label">Unread</span>
+          </div>
+          <div className="stat">
+            <span className="stat-value">{vps.length}</span>
+            <span className="stat-label">Machines</span>
           </div>
         </div>
+
+        <div className="sidebar-search">
+          <SearchIcon />
+          <input
+            type="search"
+            placeholder="Find machine…"
+            value={vpsQuery}
+            onChange={(e) => setVpsQuery(e.target.value)}
+            aria-label="Find machine"
+          />
+        </div>
+
         <nav className="vps-list">
-          <div className="section-label">Machines</div>
-          {vpsEntries.map((v) => (
-            <div
-              key={v.label ? 'all' : `vps:${v.vps}`}
-              className={`vps-item ${selectedVps === v.vps ? 'active' : ''} ${v.unread ? 'has-unread' : ''}`}
-              role="button"
-              tabIndex={0}
-              aria-current={selectedVps === v.vps ? 'page' : undefined}
-              onClick={() => setSelectedVps(v.vps)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setSelectedVps(v.vps);
-                }
-              }}
-            >
-              {v.label ? (
-                <span className="vps-icon all">◎</span>
-              ) : (
-                <span className="vps-icon" style={{ background: vpsColor(v.vps) }}>
-                  {v.vps.charAt(0).toUpperCase()}
-                </span>
-              )}
-              <span className="name">{v.label || v.vps}</span>
-              {v.lastAt ? <span className="meta">{timeAgo(v.lastAt)}</span> : null}
-              {v.unread ? <span className="badge">{v.unread}</span> : null}
-            </div>
+          <div className="section-label">Overview</div>
+          <VpsItem v={allEntry} active={selectedVps === ''} onSelect={setSelectedVps} />
+          <div className="section-label">
+            Machines
+            <span className="section-count">{visibleVps.length}</span>
+          </div>
+          {visibleVps.map((v) => (
+            <VpsItem key={v.vps} v={v} active={selectedVps === v.vps} onSelect={setSelectedVps} />
           ))}
+          {visibleVps.length === 0 && (
+            <div className="vps-empty">{vpsQuery ? 'No matching machines' : 'No machines yet'}</div>
+          )}
         </nav>
+
         <div className="sidebar-footer">
+          <div className="section-label">Preferences</div>
           <label className="toggle">
+            <MonitorIcon />
+            <span className="toggle-label">Desktop alerts</span>
             <input type="checkbox" checked={desktop} onChange={toggleDesktop} />
-            Desktop notifications
           </label>
           <label className="toggle">
+            <SoundIcon />
+            <span className="toggle-label">Sound</span>
             <input type="checkbox" checked={sound} onChange={toggleSound} />
-            Sound
           </label>
         </div>
       </aside>
 
       <main className="main">
         <header className="toolbar">
-          <h2>{selectedVps || 'All VPS'}</h2>
+          <h2>{selectedVps || 'All machines'}</h2>
           <select value={appFilter} onChange={(e) => setSelectedApp(e.target.value)}>
             <option value="">All apps</option>
             {apps.map((a) => (
@@ -357,6 +374,39 @@ export default function Dashboard() {
         {filtered.length === 0 && <div className="empty">No notifications yet.</div>}
       </main>
     </section>
+  );
+}
+
+function VpsItem({ v, active, onSelect }) {
+  return (
+    <div
+      className={`vps-item ${active ? 'active' : ''} ${v.unread ? 'has-unread' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-current={active ? 'page' : undefined}
+      onClick={() => onSelect(v.vps)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(v.vps);
+        }
+      }}
+    >
+      {v.label ? (
+        <span className="vps-icon all">
+          <GridIcon />
+        </span>
+      ) : (
+        <span className="vps-icon" style={{ '--c': vpsColor(v.vps) }}>
+          {v.vps.charAt(0).toUpperCase()}
+        </span>
+      )}
+      <span className="name-wrap">
+        <span className="name">{v.label || v.vps}</span>
+        {v.lastAt ? <span className="meta">Last seen {timeAgo(v.lastAt)}</span> : null}
+      </span>
+      {v.unread ? <span className="badge">{v.unread > 99 ? '99+' : v.unread}</span> : null}
+    </div>
   );
 }
 
@@ -432,3 +482,48 @@ function PageIcon() {
     </svg>
   );
 }
+
+function Icon({ children }) {
+  return (
+    <svg className="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+const BellIcon = () => (
+  <Icon>
+    <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+  </Icon>
+);
+
+const SearchIcon = () => (
+  <Icon>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </Icon>
+);
+
+const GridIcon = () => (
+  <Icon>
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </Icon>
+);
+
+const MonitorIcon = () => (
+  <Icon>
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <path d="M8 21h8M12 17v4" />
+  </Icon>
+);
+
+const SoundIcon = () => (
+  <Icon>
+    <path d="M11 5 6 9H2v6h4l5 4z" />
+    <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" />
+  </Icon>
+);
