@@ -24,6 +24,9 @@ const prefs = {
   set sound(v) {
     localStorage.setItem('sound', v ? '1' : '0');
   },
+  set theme(v) {
+    localStorage.setItem('theme', v);
+  },
 };
 
 function timeAgo(ts) {
@@ -115,6 +118,7 @@ export default function Dashboard() {
   const [selectedApp, setSelectedApp] = useState('');
   const [vpsQuery, setVpsQuery] = useState('');
   const [onlyUnread, setOnlyUnread] = useState(false);
+  const [theme, setTheme] = useState('light');
   const [flashIds, setFlashIds] = useState(() => new Set());
   const [connected, setConnected] = useState(false);
   const [desktop, setDesktop] = useState(false);
@@ -201,6 +205,7 @@ export default function Dashboard() {
   useEffect(() => {
     setDesktop(prefs.desktop && 'Notification' in window && Notification.permission === 'granted');
     setSound(prefs.sound);
+    setTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
     const timer = setInterval(() => setTick((t) => t + 1), 30000);
     return () => clearInterval(timer);
   }, []);
@@ -249,6 +254,13 @@ export default function Dashboard() {
     }
     prefs.desktop = true;
     setDesktop(true);
+  }
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    prefs.theme = next;
+    setTheme(next);
   }
 
   function toggleSound(e) {
@@ -393,6 +405,15 @@ export default function Dashboard() {
             <button className="btn danger" disabled={!scoped.length} onClick={clearAll} title="Delete notifications">
               <TrashIcon />
               Clear
+            </button>
+            <span className="toolbar-sep" />
+            <button
+              className="btn theme-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
             </button>
           </div>
         </header>
@@ -628,5 +649,18 @@ const InboxIcon = () => (
   <Icon>
     <path d="M22 12h-6l-2 3h-4l-2-3H2" />
     <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+  </Icon>
+);
+
+const SunIcon = () => (
+  <Icon>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+  </Icon>
+);
+
+const MoonIcon = () => (
+  <Icon>
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
   </Icon>
 );
