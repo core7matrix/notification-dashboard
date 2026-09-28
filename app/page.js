@@ -114,6 +114,7 @@ export default function Dashboard() {
   const [selectedVps, setSelectedVps] = useState('');
   const [selectedApp, setSelectedApp] = useState('');
   const [vpsQuery, setVpsQuery] = useState('');
+  const [onlyUnread, setOnlyUnread] = useState(false);
   const [flashIds, setFlashIds] = useState(() => new Set());
   const [connected, setConnected] = useState(false);
   const [desktop, setDesktop] = useState(false);
@@ -212,7 +213,9 @@ export default function Dashboard() {
 
   const apps = [...new Set(items.map((n) => n.app))].sort();
   const appFilter = apps.includes(selectedApp) ? selectedApp : '';
-  const filtered = items.filter((n) => (!selectedVps || n.vps === selectedVps) && (!appFilter || n.app === appFilter));
+  const scoped = items.filter((n) => (!selectedVps || n.vps === selectedVps) && (!appFilter || n.app === appFilter));
+  const scopedUnread = scoped.filter((n) => !n.read).length;
+  const filtered = onlyUnread ? scoped.filter((n) => !n.read) : scoped;
   const allEntry = { vps: '', label: 'All machines', unread: totalUnread, lastAt: 0 };
   const vpsNeedle = vpsQuery.trim().toLowerCase();
   const visibleVps = vpsNeedle ? vps.filter((v) => v.vps.toLowerCase().includes(vpsNeedle)) : vps;
@@ -265,7 +268,10 @@ export default function Dashboard() {
             <span className="brand-name">Notifications</span>
             <span className="brand-sub">Monitoring console</span>
           </div>
-          <span className={`status-pill ${connected ? 'online' : 'offline'}`} title={connected ? 'Connected' : 'Reconnecting…'}>
+          <span
+            className={`status-pill ${connected ? 'online' : 'offline'}`}
+            title={connected ? 'Connected' : 'Reconnecting…'}
+          >
             <span className="dot" />
             {connected ? 'Live' : 'Offline'}
           </span>
@@ -325,53 +331,117 @@ export default function Dashboard() {
 
       <main className="main">
         <header className="toolbar">
-          <h2>{selectedVps || 'All machines'}</h2>
-          <select value={appFilter} onChange={(e) => setSelectedApp(e.target.value)}>
-            <option value="">All apps</option>
-            {apps.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-          <div className="spacer" />
-          <button className="secondary" onClick={() => markRead(selectedVps ? { vps: selectedVps } : {})}>
-            Mark all read
-          </button>
-          <button className="danger" onClick={clearAll}>
-            Clear
-          </button>
-        </header>
-        <ul className="list">
-          {filtered.map((n, i) => {
-            const prev = filtered[i - 1];
-            const newDay = !prev || dayKey(prev.receivedAt) !== dayKey(n.receivedAt);
-            const grouped =
-              !newDay &&
-              prev.vps === n.vps &&
-              prev.app === n.app &&
-              prev.title === n.title &&
-              prev.pageTitle === n.pageTitle &&
-              prev.source === n.source &&
-              prev.receivedAt - n.receivedAt < GROUP_WINDOW;
-            return (
-              <Fragment key={n.id}>
-                {newDay && (
-                  <li className="day-divider">
-                    <span>{dayLabel(n.receivedAt)}</span>
-                  </li>
+          <div className="toolbar-title">
+            {selectedVps ? (
+              <span className="vps-icon title-icon" style={{ '--c': vpsColor(selectedVps) }}>
+                {selectedVps.charAt(0).toUpperCase()}
+              </span>
+            ) : (
+              <span className="vps-icon all title-icon">
+                <GridIcon />
+              </span>
+            )}
+            <div className="title-text">
+              <h2>{selectedVps || 'All machines'}</h2>
+              <span className="subtitle">
+                {scoped.length} notification{scoped.length === 1 ? '' : 's'}
+                {scopedUnread ? (
+                  <>
+                    {' '}
+                    · <strong>{scopedUnread} unread</strong>
+                  </>
+                ) : (
+                  ' · All caught up'
                 )}
-                <Item
-                  n={n}
-                  grouped={grouped}
-                  flash={flashIds.has(n.id)}
-                  onClick={() => !n.read && markRead({ ids: [n.id] })}
-                />
-              </Fragment>
-            );
-          })}
-        </ul>
-        {filtered.length === 0 && <div className="empty">No notifications yet.</div>}
+              </span>
+            </div>
+          </div>
+          <div className="spacer" />
+          <div className="toolbar-actions">
+            <div className="segmented" role="group" aria-label="Show">
+              <button
+                className={!onlyUnread ? 'on' : ''}
+                aria-pressed={!onlyUnread}
+                onClick={() => setOnlyUnread(false)}
+              >
+                All
+              </button>
+              <button className={onlyUnread ? 'on' : ''} aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)}>
+                Unread
+              </button>
+            </div>
+            <div className="select-wrap">
+              <FilterIcon />
+              <select value={appFilter} onChange={(e) => setSelectedApp(e.target.value)} aria-label="Filter by app">
+                <option value="">All apps</option>
+                {apps.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="toolbar-sep" />
+            <button
+              className="btn"
+              disabled={!scopedUnread}
+              onClick={() => markRead(selectedVps ? { vps: selectedVps } : {})}
+            >
+              <CheckIcon />
+              Mark all read
+            </button>
+            <button className="btn danger" disabled={!scoped.length} onClick={clearAll} title="Delete notifications">
+              <TrashIcon />
+              Clear
+            </button>
+          </div>
+        </header>
+        <div className="feed-scroll">
+          {filtered.length > 0 && (
+            <ul className="list">
+              {filtered.map((n, i) => {
+                const prev = filtered[i - 1];
+                const newDay = !prev || dayKey(prev.receivedAt) !== dayKey(n.receivedAt);
+                const grouped =
+                  !newDay &&
+                  prev.vps === n.vps &&
+                  prev.app === n.app &&
+                  prev.title === n.title &&
+                  prev.pageTitle === n.pageTitle &&
+                  prev.source === n.source &&
+                  prev.receivedAt - n.receivedAt < GROUP_WINDOW;
+                return (
+                  <Fragment key={n.id}>
+                    {newDay && (
+                      <li className="day-divider">
+                        <span>{dayLabel(n.receivedAt)}</span>
+                      </li>
+                    )}
+                    <Item
+                      n={n}
+                      grouped={grouped}
+                      flash={flashIds.has(n.id)}
+                      onClick={() => !n.read && markRead({ ids: [n.id] })}
+                    />
+                  </Fragment>
+                );
+              })}
+            </ul>
+          )}
+          {filtered.length === 0 && (
+            <div className="empty">
+              <span className="empty-icon">
+                <InboxIcon />
+              </span>
+              <h3>{onlyUnread && scoped.length ? 'All caught up' : 'No notifications yet'}</h3>
+              <p>
+                {onlyUnread && scoped.length
+                  ? 'There are no unread notifications here.'
+                  : 'New notifications will show up here as they arrive.'}
+              </p>
+            </div>
+          )}
+        </div>
       </main>
     </section>
   );
@@ -426,7 +496,10 @@ function Avatar({ n }) {
 function Item({ n, grouped, flash, onClick }) {
   const fullDate = new Date(n.receivedAt).toLocaleString();
   return (
-    <li className={`msg ${grouped ? 'grouped' : ''} ${n.read ? '' : 'unread'} ${flash ? 'flash' : ''}`} onClick={onClick}>
+    <li
+      className={`msg ${grouped ? 'grouped' : ''} ${n.read ? '' : 'unread'} ${flash ? 'flash' : ''}`}
+      onClick={onClick}
+    >
       <div className="gutter">
         {grouped ? (
           <time className="hover-time" title={fullDate}>
@@ -444,8 +517,13 @@ function Item({ n, grouped, flash, onClick }) {
               {clockTime(n.receivedAt)}
             </time>
             <span className="chips">
-              <span className="chip" title="VPS">{n.vps}</span>
-              <span className="chip" title="App">{n.app}</span>
+              <span className="chip" title="Machine">
+                <span className="chip-dot" style={{ background: vpsColor(n.vps) }} />
+                {n.vps}
+              </span>
+              <span className="chip subtle" title="App">
+                {n.app}
+              </span>
             </span>
           </div>
         )}
@@ -525,5 +603,30 @@ const SoundIcon = () => (
   <Icon>
     <path d="M11 5 6 9H2v6h4l5 4z" />
     <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" />
+  </Icon>
+);
+
+const FilterIcon = () => (
+  <Icon>
+    <path d="M3 5h18M6 12h12M10 19h4" />
+  </Icon>
+);
+
+const CheckIcon = () => (
+  <Icon>
+    <path d="M20 6 9 17l-5-5" />
+  </Icon>
+);
+
+const TrashIcon = () => (
+  <Icon>
+    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+  </Icon>
+);
+
+const InboxIcon = () => (
+  <Icon>
+    <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+    <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
   </Icon>
 );
