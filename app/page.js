@@ -182,6 +182,7 @@ export default function Dashboard() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [confirmMarkRead, setConfirmMarkRead] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [, setTick] = useState(0);
   const itemsRef = useRef([]);
   const loadedRef = useRef(false);
@@ -277,6 +278,13 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e) => e.key === 'Escape' && setNavOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navOpen]);
+
   const totalUnread = vps.reduce((sum, v) => sum + v.unread, 0);
 
   useEffect(() => {
@@ -292,6 +300,11 @@ export default function Dashboard() {
   const allEntry = { vps: '', label: 'All machines', unread: totalUnread, lastAt: 0 };
   const vpsNeedle = vpsQuery.trim().toLowerCase();
   const visibleVps = vpsNeedle ? vps.filter((v) => v.vps.toLowerCase().includes(vpsNeedle)) : vps;
+
+  function selectVps(name) {
+    setSelectedVps(name);
+    setNavOpen(false);
+  }
 
   function runChange(change, request) {
     const before = itemsRef.current;
@@ -360,7 +373,8 @@ export default function Dashboard() {
 
   return (
     <section className="app">
-      <aside className="sidebar">
+      {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} />}
+      <aside className={`sidebar ${navOpen ? 'open' : ''}`}>
         <div className="brand">
           <span className="brand-logo">
             <BellIcon />
@@ -402,13 +416,13 @@ export default function Dashboard() {
 
         <nav className="vps-list">
           <div className="section-label">Overview</div>
-          <VpsItem v={allEntry} active={selectedVps === ''} onSelect={setSelectedVps} />
+          <VpsItem v={allEntry} active={selectedVps === ''} onSelect={selectVps} />
           <div className="section-label">
             Machines
             <span className="section-count">{visibleVps.length}</span>
           </div>
           {visibleVps.map((v) => (
-            <VpsItem key={v.vps} v={v} active={selectedVps === v.vps} onSelect={setSelectedVps} />
+            <VpsItem key={v.vps} v={v} active={selectedVps === v.vps} onSelect={selectVps} />
           ))}
           {visibleVps.length === 0 && (
             <div className="vps-empty">{vpsQuery ? 'No matching machines' : 'No machines yet'}</div>
@@ -433,6 +447,10 @@ export default function Dashboard() {
       <main className="main">
         <header className="toolbar">
           <div className="toolbar-title">
+            <button className="btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open machine list">
+              <MenuIcon />
+              {totalUnread > 0 && <span className="menu-dot" />}
+            </button>
             {selectedVps ? (
               <span className="vps-icon title-icon" style={{ '--c': vpsColor(selectedVps) }}>
                 {selectedVps.charAt(0).toUpperCase()}
@@ -487,13 +505,14 @@ export default function Dashboard() {
               className="btn"
               disabled={!scopedUnread}
               onClick={() => setConfirmMarkRead(true)}
+              title="Mark all read"
             >
               <CheckIcon />
-              Mark all read
+              <span className="btn-label">Mark all read</span>
             </button>
             <button className="btn danger" disabled={!scoped.length} onClick={() => setConfirmClear(true)} title="Delete notifications">
               <TrashIcon />
-              Clear
+              <span className="btn-label">Clear</span>
             </button>
             <span className="toolbar-sep" />
             <button
@@ -867,6 +886,12 @@ const BellIcon = () => (
   <Icon>
     <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
     <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+  </Icon>
+);
+
+const MenuIcon = () => (
+  <Icon>
+    <path d="M4 6h16M4 12h16M4 18h16" />
   </Icon>
 );
 
