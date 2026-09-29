@@ -690,6 +690,18 @@ button {
   filter: brightness(0.92);
 }
 
+.btn.primary-solid {
+  background: var(--mn-accent);
+  border-color: var(--mn-accent);
+  color: #fff;
+}
+
+.btn.primary-solid:hover:not(:disabled) {
+  background: var(--mn-accent);
+  border-color: var(--mn-accent);
+  filter: brightness(0.92);
+}
+
 /* modal */
 
 .modal-backdrop {
@@ -701,8 +713,13 @@ button {
   justify-content: center;
   padding: 20px;
   background: rgb(15 18 24 / 45%);
-  backdrop-filter: blur(2px);
-  animation: modal-fade 0.15s ease-out;
+  backdrop-filter: blur(3px);
+  animation: modal-backdrop-in 0.22s ease-out both;
+}
+
+.modal-backdrop.closing {
+  pointer-events: none;
+  animation: modal-backdrop-out 0.16s ease-in both;
 }
 
 .modal {
@@ -714,7 +731,12 @@ button {
   background: var(--mn-surface);
   color: var(--mn-text);
   box-shadow: 0 20px 50px rgb(0 0 0 / 25%);
-  animation: modal-pop 0.15s ease-out;
+  transform-origin: center;
+  animation: modal-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.modal-backdrop.closing .modal {
+  animation: modal-out 0.16s cubic-bezier(0.4, 0, 1, 1) both;
 }
 
 .modal-icon {
@@ -727,6 +749,11 @@ button {
   border-radius: 10px;
   background: var(--mn-danger-soft);
   color: var(--mn-danger);
+}
+
+.modal-icon.primary {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent);
 }
 
 .modal-icon .ui-icon {
@@ -758,16 +785,40 @@ button {
   gap: 8px;
 }
 
-@keyframes modal-fade {
+@keyframes modal-backdrop-in {
   from {
     opacity: 0;
+    backdrop-filter: blur(0);
   }
 }
 
-@keyframes modal-pop {
+@keyframes modal-backdrop-out {
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+}
+
+@keyframes modal-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.98);
+    transform: translateY(12px) scale(0.95);
+  }
+}
+
+@keyframes modal-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal-backdrop.closing,
+  .modal,
+  .modal-backdrop.closing .modal {
+    animation-duration: 0.01ms;
   }
 }
 
@@ -827,6 +878,81 @@ button {
 
 .msg.unread:hover {
   background: var(--mn-unread-hover);
+}
+
+.msg-actions {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--mn-border);
+  border-radius: 8px;
+  background: var(--mn-surface);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(2px);
+  transition:
+    opacity 0.12s,
+    transform 0.12s,
+    visibility 0.12s;
+}
+
+.msg.grouped .msg-actions {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.msg:hover .msg-actions,
+.msg-actions:focus-within {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.msg.grouped:hover .msg-actions,
+.msg.grouped .msg-actions:focus-within {
+  transform: translateY(-50%);
+}
+
+.msg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mn-muted);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.msg-action .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.msg-action:hover {
+  background: var(--mn-hover);
+  color: var(--mn-text);
+}
+
+.msg-action.danger:hover {
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger);
+}
+
+.msg-action:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
 }
 
 .msg.flash {

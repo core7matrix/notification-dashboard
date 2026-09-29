@@ -126,6 +126,24 @@ function withReadCounts(vpsList, items, { ids, vps }) {
   return vpsList.map((v) => (perVps[v.vps] ? { ...v, unread: Math.max(0, v.unread - perVps[v.vps]) } : v));
 }
 
+function withoutIds(items, ids) {
+  const idSet = new Set(ids);
+  return items.filter((n) => !idSet.has(n.id));
+}
+
+function applyChange(items, vpsList, { kind, body }) {
+  if (kind === 'delete') {
+    const idSet = new Set(body.ids);
+    const removed = items.filter((n) => idSet.has(n.id));
+    const nextVps = withReadCounts(vpsList, removed, body).map((v) => {
+      const count = removed.filter((n) => n.vps === v.vps).length;
+      return count ? { ...v, total: Math.max(0, v.total - count) } : v;
+    });
+    return [withoutIds(items, body.ids), nextVps];
+  }
+  return [withRead(items, body), withReadCounts(vpsList, items, body)];
+}
+
 export default function Dashboard() {
   const [items, setItems] = useState([]);
   const [vps, setVps] = useState([]);
@@ -139,11 +157,13 @@ export default function Dashboard() {
   const [desktop, setDesktop] = useState(false);
   const [sound, setSound] = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [confirmMarkRead, setConfirmMarkRead] = useState(false);
   const [, setTick] = useState(0);
   const itemsRef = useRef([]);
   const loadedRef = useRef(false);
-  // Reads not yet confirmed by the server, re-applied to any fetch that may predate them.
-  const pendingReadsRef = useRef([]);
+  // Reads/deletes not yet confirmed by the server, re-applied to any fetch that may predate them.
+  const pendingRef = useRef([]);
 
   const updateItems = useCallback((fn) => {
     itemsRef.current = fn(itemsRef.current);
@@ -163,13 +183,10 @@ export default function Dashboard() {
       api('/api/notifications?limit=1000'),
       api('/api/vps'),
     ]);
-    pendingReadsRef.current = pendingReadsRef.current.filter((p) => !p.doneAt || p.doneAt >= startedAt);
+    pendingRef.current = pendingRef.current.filter((p) => !p.doneAt || p.doneAt >= startedAt);
     let latest = fetchedItems;
     let vpsItems = fetchedVps;
-    for (const { body } of pendingReadsRef.current) {
-      vpsItems = withReadCounts(vpsItems, latest, body);
-      latest = withRead(latest, body);
-    }
+    for (const change of pendingRef.current) [latest, vpsItems] = applyChange(latest, vpsItems, change);
     const known = new Set(itemsRef.current.map((n) => n.id));
     const fresh = loadedRef.current ? latest.filter((n) => !known.has(n.id)) : [];
     loadedRef.current = true;
@@ -194,6 +211,9 @@ export default function Dashboard() {
           break;
         case 'read':
           applyRead(msg);
+          break;
+        case 'deleted':
+          updateItems((prev) => withoutIds(prev, msg.ids));
           break;
         case 'cleared':
           updateItems((prev) => (msg.vps ? prev.filter((n) => n.vps !== msg.vps) : []));
@@ -244,28 +264,36 @@ export default function Dashboard() {
   const appFilter = apps.includes(selectedApp) ? selectedApp : '';
   const scoped = items.filter((n) => (!selectedVps || n.vps === selectedVps) && (!appFilter || n.app === appFilter));
   const scopedUnread = scoped.filter((n) => !n.read).length;
+  const markReadCount = selectedVps ? (vps.find((v) => v.vps === selectedVps)?.unread ?? 0) : totalUnread;
   const filtered = onlyUnread ? scoped.filter((n) => !n.read) : scoped;
   const allEntry = { vps: '', label: 'All machines', unread: totalUnread, lastAt: 0 };
   const vpsNeedle = vpsQuery.trim().toLowerCase();
   const visibleVps = vpsNeedle ? vps.filter((v) => v.vps.toLowerCase().includes(vpsNeedle)) : vps;
 
-  function markRead(body) {
+  function runChange(change, request) {
     const before = itemsRef.current;
-    setVps((prev) => withReadCounts(prev, before, body));
-    applyRead(body);
+    setVps((prev) => applyChange(before, prev, change)[1]);
+    updateItems((prev) => applyChange(prev, [], change)[0]);
 
-    const pending = { body };
-    pendingReadsRef.current.push(pending);
-    api('/api/notifications/read', { method: 'POST', body: JSON.stringify(body) }).then(
+    pendingRef.current.push(change);
+    request.then(
       () => {
-        pending.doneAt = Date.now();
+        change.doneAt = Date.now();
       },
       (err) => {
         console.error(err);
-        pendingReadsRef.current = pendingReadsRef.current.filter((p) => p !== pending);
+        pendingRef.current = pendingRef.current.filter((p) => p !== change);
         loadData().catch(console.error);
       }
     );
+  }
+
+  function markRead(body) {
+    runChange({ kind: 'read', body }, api('/api/notifications/read', { method: 'POST', body: JSON.stringify(body) }));
+  }
+
+  function deleteOne(id) {
+    runChange({ kind: 'delete', body: { ids: [id] } }, api(`/api/notifications/${id}`, { method: 'DELETE' }));
   }
 
   function clearAll() {
@@ -435,7 +463,7 @@ export default function Dashboard() {
             <button
               className="btn"
               disabled={!scopedUnread}
-              onClick={() => markRead(selectedVps ? { vps: selectedVps } : {})}
+              onClick={() => setConfirmMarkRead(true)}
             >
               <CheckIcon />
               Mark all read
@@ -481,6 +509,7 @@ export default function Dashboard() {
                       grouped={grouped}
                       flash={flashIds.has(n.id)}
                       onClick={() => !n.read && markRead({ ids: [n.id] })}
+                      onDelete={() => setPendingDelete(n)}
                     />
                   </Fragment>
                 );
@@ -519,19 +548,72 @@ export default function Dashboard() {
           onCancel={() => setConfirmClear(false)}
         />
       )}
+      {confirmMarkRead && (
+        <ConfirmModal
+          tone="primary"
+          icon={<CheckIcon />}
+          title="Mark all as read?"
+          message={
+            <>
+              <strong>{markReadCount}</strong> unread {markReadCount === 1 ? 'notification' : 'notifications'} from{' '}
+              {selectedVps ? <strong>{selectedVps}</strong> : 'every machine'} will be marked as read.
+            </>
+          }
+          confirmLabel="Mark as read"
+          onConfirm={() => {
+            markRead(selectedVps ? { vps: selectedVps } : {});
+            setConfirmMarkRead(false);
+          }}
+          onCancel={() => setConfirmMarkRead(false)}
+        />
+      )}
+      {pendingDelete && (
+        <ConfirmModal
+          title="Delete message?"
+          message={
+            <>
+              This message from <strong>{pendingDelete.title || pendingDelete.app}</strong> will be permanently
+              deleted.
+            </>
+          }
+          confirmLabel="Delete"
+          onConfirm={() => {
+            deleteOne(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </section>
   );
 }
 
-function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
+const MODAL_EXIT_MS = 160;
+
+function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel, tone = 'danger', icon = <TrashIcon /> }) {
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const timerRef = useRef(null);
+
+  const close = useCallback((action) => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    timerRef.current = setTimeout(action, MODAL_EXIT_MS);
+  }, []);
+
+  const cancel = useCallback(() => close(onCancel), [close, onCancel]);
+
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onCancel();
+    const onKey = (e) => e.key === 'Escape' && cancel();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
+  }, [cancel]);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className={`modal-backdrop ${closing ? 'closing' : ''}`} onClick={cancel}>
       <div
         className="modal"
         role="alertdialog"
@@ -539,18 +621,16 @@ function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
         aria-labelledby="modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-icon">
-          <TrashIcon />
-        </div>
+        <div className={`modal-icon ${tone}`}>{icon}</div>
         <h2 id="modal-title" className="modal-title">
           {title}
         </h2>
         <p className="modal-message">{message}</p>
         <div className="modal-actions">
-          <button className="btn" onClick={onCancel} autoFocus>
+          <button className="btn" onClick={cancel} autoFocus>
             Cancel
           </button>
-          <button className="btn danger-solid" onClick={onConfirm}>
+          <button className={`btn ${tone}-solid`} onClick={() => close(onConfirm)}>
             {confirmLabel}
           </button>
         </div>
@@ -605,13 +685,18 @@ function Avatar({ n }) {
   );
 }
 
-function Item({ n, grouped, flash, onClick }) {
+function Item({ n, grouped, flash, onClick, onDelete }) {
   const fullDate = new Date(n.receivedAt).toLocaleString();
   return (
     <li
       className={`msg ${grouped ? 'grouped' : ''} ${n.read ? '' : 'unread'} ${flash ? 'flash' : ''}`}
       onClick={onClick}
     >
+      <div className="msg-actions" onClick={(e) => e.stopPropagation()}>
+        <button className="msg-action danger" onClick={onDelete} title="Delete message" aria-label="Delete message">
+          <TrashIcon />
+        </button>
+      </div>
       <div className="gutter">
         {grouped ? (
           <time className="hover-time" title={fullDate}>
