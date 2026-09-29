@@ -44,6 +44,21 @@ function clockTime(ts, withPeriod = true) {
 
 const dayKey = (ts) => new Date(ts).toDateString();
 
+function timeZoneInfo(ts) {
+  const d = new Date(ts);
+  const zoneName = (style) =>
+    new Intl.DateTimeFormat([], { timeZoneName: style }).formatToParts(d).find((p) => p.type === 'timeZoneName')?.value;
+  const offsetMin = -d.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMin);
+  const offset = `UTC${sign}${Math.floor(abs / 60)}${abs % 60 ? `:${String(abs % 60).padStart(2, '0')}` : ''}`;
+  const iana = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return {
+    short: zoneName('short') || offset,
+    title: [zoneName('long'), iana, offset].filter(Boolean).join(' · '),
+  };
+}
+
 function dayParts(ts) {
   const d = new Date(ts);
   const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -496,6 +511,7 @@ export default function Dashboard() {
             <ul className="list">
               {groupByDay(filtered).map((day) => {
                 const { label, sub } = dayParts(day.items[0].receivedAt);
+                const tz = timeZoneInfo(day.items[0].receivedAt);
                 const unread = day.items.filter((n) => !n.read).length;
                 return (
                   <li key={day.key} className="day-group">
@@ -503,6 +519,10 @@ export default function Dashboard() {
                       <span className="day-pill">
                         <span className="day-label">{label}</span>
                         {sub && <span className="day-sub">{sub}</span>}
+                        <span className="day-tz" title={tz.title}>
+                          <GlobeIcon />
+                          {tz.short}
+                        </span>
                         <span className="day-count" title={`${day.items.length} messages, ${unread} unread`}>
                           {unread ? (
                             <>
@@ -713,7 +733,10 @@ function Avatar({ n }) {
 }
 
 function Item({ n, grouped, flash, onClick, onDelete }) {
-  const fullDate = new Date(n.receivedAt).toLocaleString();
+  const fullDate = new Date(n.receivedAt).toLocaleString([], {
+    dateStyle: 'full',
+    timeStyle: 'long',
+  });
   return (
     <li
       className={`msg ${grouped ? 'grouped' : ''} ${n.read ? '' : 'unread'} ${flash ? 'flash' : ''}`}
@@ -790,6 +813,15 @@ function Item({ n, grouped, flash, onClick, onDelete }) {
         )}
       </div>
     </li>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg className="meta-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M1.75 8h12.5M8 1.75c1.7 1.8 2.5 3.9 2.5 6.25S9.7 12.45 8 14.25C6.3 12.45 5.5 10.35 5.5 8S6.3 3.55 8 1.75" />
+    </svg>
   );
 }
 
