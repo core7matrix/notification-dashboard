@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Pusher from 'pusher-js';
 import { CHANNEL, EVENT } from '@/lib/channel';
 
@@ -44,19 +44,27 @@ function clockTime(ts, withPeriod = true) {
 
 const dayKey = (ts) => new Date(ts).toDateString();
 
-function dayLabel(ts) {
+function dayParts(ts) {
   const d = new Date(ts);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (dayKey(d) === dayKey(today)) return 'Today';
-  if (dayKey(d) === dayKey(yesterday)) return 'Yesterday';
-  return d.toLocaleDateString([], {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric',
-  });
+  const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const daysAgo = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86400000);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const date = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: sameYear ? undefined : 'numeric' });
+
+  if (daysAgo === 0) return { label: 'Today', sub: date };
+  if (daysAgo === 1) return { label: 'Yesterday', sub: date };
+  if (daysAgo > 1 && daysAgo < 7) return { label: d.toLocaleDateString([], { weekday: 'long' }), sub: date };
+  return { label: d.toLocaleDateString([], { weekday: 'short', month: 'long', day: 'numeric', year: sameYear ? undefined : 'numeric' }), sub: null };
+}
+
+function groupByDay(items) {
+  const days = [];
+  for (const n of items) {
+    const key = dayKey(n.receivedAt);
+    if (days.at(-1)?.key !== key) days.push({ key, items: [] });
+    days.at(-1).items.push(n);
+  }
+  return days;
 }
 
 function initials(name) {
@@ -486,32 +494,51 @@ export default function Dashboard() {
         <div className="feed-scroll">
           {filtered.length > 0 && (
             <ul className="list">
-              {filtered.map((n, i) => {
-                const prev = filtered[i - 1];
-                const newDay = !prev || dayKey(prev.receivedAt) !== dayKey(n.receivedAt);
-                const grouped =
-                  !newDay &&
-                  prev.vps === n.vps &&
-                  prev.app === n.app &&
-                  prev.title === n.title &&
-                  prev.pageTitle === n.pageTitle &&
-                  prev.source === n.source &&
-                  prev.receivedAt - n.receivedAt < GROUP_WINDOW;
+              {groupByDay(filtered).map((day) => {
+                const { label, sub } = dayParts(day.items[0].receivedAt);
+                const unread = day.items.filter((n) => !n.read).length;
                 return (
-                  <Fragment key={n.id}>
-                    {newDay && (
-                      <li className="day-divider">
-                        <span>{dayLabel(n.receivedAt)}</span>
-                      </li>
-                    )}
-                    <Item
-                      n={n}
-                      grouped={grouped}
-                      flash={flashIds.has(n.id)}
-                      onClick={() => !n.read && markRead({ ids: [n.id] })}
-                      onDelete={() => setPendingDelete(n)}
-                    />
-                  </Fragment>
+                  <li key={day.key} className="day-group">
+                    <div className="day-divider">
+                      <span className="day-pill">
+                        <span className="day-label">{label}</span>
+                        {sub && <span className="day-sub">{sub}</span>}
+                        <span className="day-count" title={`${day.items.length} messages, ${unread} unread`}>
+                          {unread ? (
+                            <>
+                              <span className="day-unread-dot" />
+                              {unread} unread
+                            </>
+                          ) : (
+                            day.items.length
+                          )}
+                        </span>
+                      </span>
+                    </div>
+                    <ul className="day-items">
+                      {day.items.map((n, i) => {
+                        const prev = day.items[i - 1];
+                        const grouped =
+                          !!prev &&
+                          prev.vps === n.vps &&
+                          prev.app === n.app &&
+                          prev.title === n.title &&
+                          prev.pageTitle === n.pageTitle &&
+                          prev.source === n.source &&
+                          prev.receivedAt - n.receivedAt < GROUP_WINDOW;
+                        return (
+                          <Item
+                            key={n.id}
+                            n={n}
+                            grouped={grouped}
+                            flash={flashIds.has(n.id)}
+                            onClick={() => !n.read && markRead({ ids: [n.id] })}
+                            onDelete={() => setPendingDelete(n)}
+                          />
+                        );
+                      })}
+                    </ul>
+                  </li>
                 );
               })}
             </ul>

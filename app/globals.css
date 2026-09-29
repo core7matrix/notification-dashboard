@@ -465,7 +465,6 @@ button {
   --mn-chip-soft: #f3f4f6;
   --mn-badge-text: #1e40af;
   --mn-badge-unread: #e2eaff;
-  --mn-divider-bg: rgb(250 251 252 / 92%);
   color-scheme: light;
 }
 
@@ -1145,30 +1144,97 @@ button {
   clear: both;
 }
 
+.day-group {
+  position: relative;
+}
+
+.day-group::before {
+  content: '';
+  position: absolute;
+  top: 25px;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  background: var(--mn-border);
+}
+
+.day-group + .day-group {
+  margin-top: 6px;
+}
+
+.day-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 .day-divider {
   position: sticky;
   top: -20px;
-  z-index: 1;
+  z-index: 3;
   display: flex;
+  justify-content: center;
+  padding: 12px 20px 6px;
+  pointer-events: none;
+}
+
+.day-pill {
+  display: inline-flex;
   align-items: center;
-  padding: 8px 20px;
-  background: var(--mn-divider-bg);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--mn-border);
-  font-size: 11px;
+  gap: 8px;
+  height: 26px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: var(--mn-surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 2px 8px rgb(16 24 40 / 4%);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: auto;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.day-label {
   font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--mn-text);
+}
+
+.day-sub {
+  color: var(--mn-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.day-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--mn-chip-soft);
   color: var(--mn-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
-.day-divider:first-child {
-  border-radius: 12px 12px 0 0;
+.day-unread-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mn-accent);
 }
 
-.day-divider:not(:first-child) {
-  margin-top: 8px;
-  border-top: 1px solid var(--mn-border);
+.day-count:has(.day-unread-dot) {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent);
+}
+
+[data-theme='dark'] .day-pill {
+  box-shadow: 0 2px 10px rgb(0 0 0 / 35%);
 }
 
 .empty {
@@ -1243,7 +1309,6 @@ button {
   --mn-chip-soft: #1d2129;
   --mn-badge-text: #bccdff;
   --mn-badge-unread: rgb(107 147 255 / 22%);
-  --mn-divider-bg: rgb(20 23 30 / 90%);
   color-scheme: dark;
 }
 
