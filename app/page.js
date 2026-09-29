@@ -111,6 +111,21 @@ async function api(path, options = {}) {
   return res.json();
 }
 
+function withRead(items, { ids, vps }) {
+  const idSet = ids ? new Set(ids) : null;
+  return items.map((n) => (!n.read && (idSet ? idSet.has(n.id) : !vps || n.vps === vps) ? { ...n, read: true } : n));
+}
+
+function withReadCounts(vpsList, items, { ids, vps }) {
+  if (!ids) return vpsList.map((v) => (!vps || v.vps === vps ? { ...v, unread: 0 } : v));
+  const idSet = new Set(ids);
+  const perVps = {};
+  for (const n of items) {
+    if (!n.read && idSet.has(n.id)) perVps[n.vps] = (perVps[n.vps] || 0) + 1;
+  }
+  return vpsList.map((v) => (perVps[v.vps] ? { ...v, unread: Math.max(0, v.unread - perVps[v.vps]) } : v));
+}
+
 export default function Dashboard() {
   const [items, setItems] = useState([]);
   const [vps, setVps] = useState([]);
@@ -127,11 +142,15 @@ export default function Dashboard() {
   const [, setTick] = useState(0);
   const itemsRef = useRef([]);
   const loadedRef = useRef(false);
+  // Reads not yet confirmed by the server, re-applied to any fetch that may predate them.
+  const pendingReadsRef = useRef([]);
 
   const updateItems = useCallback((fn) => {
     itemsRef.current = fn(itemsRef.current);
     setItems(itemsRef.current);
   }, []);
+
+  const applyRead = useCallback((body) => updateItems((prev) => withRead(prev, body)), [updateItems]);
 
   const showFresh = useCallback((fresh) => {
     setFlashIds(new Set(fresh.map((n) => n.id)));
@@ -139,10 +158,18 @@ export default function Dashboard() {
   }, []);
 
   const loadData = useCallback(async () => {
-    const [{ items: latest }, { items: vpsItems }] = await Promise.all([
+    const startedAt = Date.now();
+    const [{ items: fetchedItems }, { items: fetchedVps }] = await Promise.all([
       api('/api/notifications?limit=1000'),
       api('/api/vps'),
     ]);
+    pendingReadsRef.current = pendingReadsRef.current.filter((p) => !p.doneAt || p.doneAt >= startedAt);
+    let latest = fetchedItems;
+    let vpsItems = fetchedVps;
+    for (const { body } of pendingReadsRef.current) {
+      vpsItems = withReadCounts(vpsItems, latest, body);
+      latest = withRead(latest, body);
+    }
     const known = new Set(itemsRef.current.map((n) => n.id));
     const fresh = loadedRef.current ? latest.filter((n) => !known.has(n.id)) : [];
     loadedRef.current = true;
@@ -165,13 +192,9 @@ export default function Dashboard() {
         case 'vps':
           setVps(msg.items);
           break;
-        case 'read': {
-          const ids = msg.ids ? new Set(msg.ids) : null;
-          updateItems((prev) =>
-            prev.map((n) => (!n.read && (ids ? ids.has(n.id) : !msg.vps || n.vps === msg.vps) ? { ...n, read: true } : n))
-          );
+        case 'read':
+          applyRead(msg);
           break;
-        }
         case 'cleared':
           updateItems((prev) => (msg.vps ? prev.filter((n) => n.vps !== msg.vps) : []));
           break;
@@ -180,7 +203,7 @@ export default function Dashboard() {
           break;
       }
     },
-    [updateItems, showFresh, loadData]
+    [updateItems, applyRead, showFresh, loadData]
   );
 
   useEffect(() => {
@@ -227,7 +250,22 @@ export default function Dashboard() {
   const visibleVps = vpsNeedle ? vps.filter((v) => v.vps.toLowerCase().includes(vpsNeedle)) : vps;
 
   function markRead(body) {
-    api('/api/notifications/read', { method: 'POST', body: JSON.stringify(body) }).catch(console.error);
+    const before = itemsRef.current;
+    setVps((prev) => withReadCounts(prev, before, body));
+    applyRead(body);
+
+    const pending = { body };
+    pendingReadsRef.current.push(pending);
+    api('/api/notifications/read', { method: 'POST', body: JSON.stringify(body) }).then(
+      () => {
+        pending.doneAt = Date.now();
+      },
+      (err) => {
+        console.error(err);
+        pendingReadsRef.current = pendingReadsRef.current.filter((p) => p !== pending);
+        loadData().catch(console.error);
+      }
+    );
   }
 
   function clearAll() {
