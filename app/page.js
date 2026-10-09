@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Pusher from 'pusher-js';
 import { CHANNEL, EVENT } from '@/lib/channel';
+import { REMOVE_AFTER, REMOVE_EVERY } from '@/lib/schedule';
 
 const PUSHER_KEY = process.env.NEXT_PUBLIC_PUSHER_KEY;
 const PUSHER_CLUSTER = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
@@ -182,6 +183,7 @@ export default function Dashboard() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [confirmMarkRead, setConfirmMarkRead] = useState(false);
+  const [dbOpen, setDbOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [, setTick] = useState(0);
   const itemsRef = useRef([]);
@@ -516,6 +518,14 @@ export default function Dashboard() {
             </button>
             <span className="toolbar-sep" />
             <button
+              className="btn icon-btn"
+              onClick={() => setDbOpen(true)}
+              title="Database settings"
+              aria-label="Database settings"
+            >
+              <DatabaseIcon />
+            </button>
+            <button
               className="btn theme-btn"
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -633,6 +643,7 @@ export default function Dashboard() {
           onCancel={() => setConfirmMarkRead(false)}
         />
       )}
+      {dbOpen && <DbSettingsModal onClose={() => setDbOpen(false)} onChanged={() => loadData().catch(console.error)} />}
       {pendingDelete && (
         <ConfirmModal
           title="Delete message?"
@@ -655,6 +666,203 @@ export default function Dashboard() {
 }
 
 const MODAL_EXIT_MS = 160;
+
+function DbSettingsModal({ onClose, onChanged }) {
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const timerRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState(null);
+  const [enabled, setEnabled] = useState(false);
+  const [removeAfter, setRemoveAfter] = useState('7d');
+  const [removeEvery, setRemoveEvery] = useState('1d');
+  const [busy, setBusy] = useState('');
+  const [confirmRun, setConfirmRun] = useState(false);
+
+  const close = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    timerRef.current = setTimeout(onClose, MODAL_EXIT_MS);
+  }, [onClose]);
+
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && close();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [close]);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  const applyInfo = useCallback((data) => {
+    setInfo(data);
+    setEnabled(data.settings.enabled);
+    setRemoveAfter(data.settings.removeAfter);
+    setRemoveEvery(data.settings.removeEvery);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    api('/api/db')
+      .then((data) => {
+        if (!cancelled) applyInfo(data);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not load database settings.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyInfo]);
+
+  async function save() {
+    setBusy('save');
+    setError('');
+    setConfirmRun(false);
+    try {
+      applyInfo(
+        await api('/api/db', {
+          method: 'PUT',
+          body: JSON.stringify({ enabled, removeAfter, removeEvery }),
+        })
+      );
+    } catch {
+      setError('Could not save the removal schedule.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function removeNow() {
+    setBusy('run');
+    setError('');
+    try {
+      const data = await api('/api/db', { method: 'POST', body: JSON.stringify({ removeAfter }) });
+      applyInfo(data);
+      setConfirmRun(false);
+      onChanged();
+    } catch {
+      setError('Could not remove old notifications.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  const afterLabel = REMOVE_AFTER.find((option) => option.id === removeAfter)?.label || 'the selected age';
+  const status = info?.status || 'unknown';
+  const planLabel = status === 'free' ? 'Free' : status === 'paid' ? 'Paid' : 'Unknown';
+  const nextRun =
+    info?.settings.enabled && info.settings.lastRunAt
+      ? info.settings.lastRunAt + (REMOVE_EVERY.find((option) => option.id === info.settings.removeEvery)?.ms || 0)
+      : null;
+
+  return (
+    <div className={`modal-backdrop ${closing ? 'closing' : ''}`} onClick={close}>
+      <div
+        className="modal db-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="db-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-icon primary">
+          <DatabaseIcon />
+        </div>
+        <h2 id="db-modal-title" className="modal-title">
+          Database
+        </h2>
+        <p className="modal-message">Plan for the connected Neon database, and when old notifications are removed.</p>
+
+        {loading ? (
+          <p className="db-note">Checking the database…</p>
+        ) : (
+          <>
+            <div className="db-status">
+              <div>
+                <span className="db-status-label">Status</span>
+                <span className="db-host">{info?.host || 'No database host configured'}</span>
+              </div>
+              <span className={`plan-pill ${status}`}>{planLabel}</span>
+            </div>
+            {info?.note && <p className="db-note">{info.note}</p>}
+            {info && (
+              <p className="db-note">
+                {info.total} notification{info.total === 1 ? '' : 's'} stored
+                {info.due ? `, ${info.due} older than the saved age` : ''}.
+              </p>
+            )}
+
+            <div className="db-schedule">
+              <div className="db-schedule-head">Remove schedule</div>
+              <label className="db-switch">
+                <span>Remove old notifications automatically</span>
+                <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+              </label>
+              <label className="db-field">
+                <span>Delete notifications older than</span>
+                <select value={removeAfter} onChange={(e) => setRemoveAfter(e.target.value)}>
+                  {REMOVE_AFTER.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="db-field">
+                <span>Run cleanup</span>
+                <select value={removeEvery} onChange={(e) => setRemoveEvery(e.target.value)} disabled={!enabled}>
+                  {REMOVE_EVERY.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="db-note">
+                {!enabled
+                  ? 'Automatic removal is off. You can still remove old notifications now.'
+                  : info?.settings.enabled && nextRun
+                    ? `Next cleanup ${new Date(nextRun).toLocaleString()}. It runs while the dashboard is open or when a notification arrives.`
+                    : 'Save to start the schedule. Cleanup then runs on this interval while the dashboard is open or when a notification arrives.'}
+              </p>
+            </div>
+          </>
+        )}
+
+        {error && <p className="db-error">{error}</p>}
+
+        <div className="modal-actions">
+          {confirmRun ? (
+            <>
+              <button className="btn" onClick={() => setConfirmRun(false)} disabled={!!busy}>
+                Cancel
+              </button>
+              <button className="btn danger-solid" onClick={removeNow} disabled={!!busy || loading}>
+                {busy === 'run' ? 'Removing…' : `Delete older than ${afterLabel}`}
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn" onClick={close} disabled={!!busy}>
+                Close
+              </button>
+              <button className="btn danger" onClick={() => setConfirmRun(true)} disabled={!!busy || loading}>
+                Remove now
+              </button>
+              <button className="btn primary-solid" onClick={save} disabled={!!busy || loading}>
+                {busy === 'save' ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel, tone = 'danger', icon = <TrashIcon /> }) {
   const [closing, setClosing] = useState(false);
@@ -960,5 +1168,13 @@ const SunIcon = () => (
 const MoonIcon = () => (
   <Icon>
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+  </Icon>
+);
+
+const DatabaseIcon = () => (
+  <Icon>
+    <ellipse cx="12" cy="6" rx="8" ry="3" />
+    <path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" />
+    <path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
   </Icon>
 );

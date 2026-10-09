@@ -1,5 +1,5 @@
 import { maxNotifications } from '@/lib/auth';
-import { getDb, summarizeVps, toNotification } from '@/lib/db';
+import { applyRemovalSchedule, getDb, summarizeVps, toNotification } from '@/lib/db';
 import { broadcast } from '@/lib/pusher';
 
 export async function GET(req) {
@@ -9,6 +9,7 @@ export async function GET(req) {
   const limit = Math.min(Number(params.get('limit')) || 500, maxNotifications());
 
   const sql = await getDb();
+  await applyRemovalSchedule(sql);
   const rows = await sql`
     SELECT * FROM notifications
     WHERE (${vps}::text IS NULL OR vps = ${vps})

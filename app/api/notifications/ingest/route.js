@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isIngestRequest, maxNotifications, unauthorized } from '@/lib/auth';
-import { getDb, summarizeVps, toNotification } from '@/lib/db';
+import { applyRemovalSchedule, getDb, summarizeVps, toNotification } from '@/lib/db';
 import { broadcast } from '@/lib/pusher';
 
 // The extension calls this from its service worker, so allow cross-origin requests.
@@ -65,6 +65,7 @@ export async function POST(req) {
   const added = inserted.sort((a, b) => Number(a.seq) - Number(b.seq)).map(toNotification);
 
   if (added.length) {
+    await applyRemovalSchedule(sql);
     await sql`
       DELETE FROM notifications
       WHERE seq < (SELECT seq FROM notifications ORDER BY seq DESC OFFSET ${maxNotifications() - 1} LIMIT 1)`;
