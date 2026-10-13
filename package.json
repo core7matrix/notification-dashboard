@@ -1,12 +1,31 @@
 {
   "name": "notification-dashboard",
+  "productName": "Notification Dashboard",
   "version": "1.0.0",
   "private": true,
   "description": "Receives notifications relayed from browser extensions on VPS machines and shows them in a live dashboard.",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "electron": "node electron/brand-exe.js && electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.notification.dashboard",
+    "productName": "Notification Dashboard",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/icon.ico"
+    }
   },
   "engines": {
     "node": ">=20.9"
@@ -18,5 +37,10 @@
     "pusher-js": "^8.6.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "rcedit": "^5.0.2"
   }
 }

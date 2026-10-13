@@ -291,6 +291,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     document.title = totalUnread ? `(${totalUnread}) Notification Dashboard` : 'Notification Dashboard';
+    window.desktop?.setUnread?.(totalUnread);
   }, [totalUnread]);
 
   const apps = [...new Set(items.map((n) => n.app))].sort();
