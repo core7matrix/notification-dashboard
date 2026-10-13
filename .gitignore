@@ -2,6 +2,7 @@
 node_modules/
 .next/
 release/
+electron/.brand-stamp
 .vercel/
 data/
 .env

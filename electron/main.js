@@ -1,8 +1,12 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, session, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, session, shell } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const { trayImage } = require('./badge');
 
-const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:3000';
+const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://notification-dashboard-gamma.vercel.app';
+// const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:3000';
+
+const POLL_MS = 5000;
 const APP_ID = 'com.notification.dashboard';
 const APP_NAME = 'Notification Dashboard';
 const ICON_PATH = path.join(__dirname, 'icon.ico');
@@ -14,12 +18,16 @@ if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 // identity is "Electron" until that shortcut exists.
 function installWindowsIdentity() {
   if (process.platform !== 'win32') return;
-  const shortcut = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${APP_NAME}.lnk`);
-  const packaged = app.isPackaged;
+  const programs = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+  fs.mkdirSync(programs, { recursive: true });
+  const shortcut = path.join(programs, `${APP_NAME}.lnk`);
+  const appPath = path.resolve(app.getAppPath());
+  // No extra quotes: a quoted path is not a real folder, so Windows opens
+  // Electron's welcome window instead of this dashboard.
   const wrote = shell.writeShortcutLink(shortcut, 'create', {
     target: process.execPath,
-    args: packaged ? '' : `"${path.resolve(app.getAppPath())}"`,
-    cwd: packaged ? path.dirname(process.execPath) : path.resolve(app.getAppPath()),
+    args: app.isPackaged ? '' : appPath,
+    cwd: app.isPackaged ? path.dirname(process.execPath) : appPath,
     icon: ICON_PATH,
     iconIndex: 0,
     appUserModelId: APP_ID,
@@ -31,6 +39,64 @@ function installWindowsIdentity() {
 let win;
 let tray;
 let unreadCount = 0;
+let seenIds = null;
+let pollTimer;
+const activeToasts = new Set();
+const RECENT_MS = 10 * 60 * 1000;
+
+async function pollDashboard() {
+  try {
+    const [vpsRes, noteRes] = await Promise.all([
+      fetch(new URL('/api/vps', DASHBOARD_URL)),
+      fetch(new URL('/api/notifications?limit=30', DASHBOARD_URL)),
+    ]);
+    if (!vpsRes.ok || !noteRes.ok) return;
+    const vps = await vpsRes.json();
+    const notes = await noteRes.json();
+    const unread = (vps.items || []).reduce((sum, item) => sum + (Number(item.unread) || 0), 0);
+    if (unread !== unreadCount) applyUnread(unread);
+
+    const items = notes.items || [];
+    if (!seenIds) {
+      seenIds = new Set(items.map((item) => item.id));
+      const recent = items.filter((item) => !item.read && Date.now() - Number(item.receivedAt) < RECENT_MS);
+      for (const item of recent.slice(0, 3)) showToast(item);
+      return;
+    }
+    const fresh = items.filter((item) => !item.read && item.id && !seenIds.has(item.id));
+    for (const item of items) if (item.id) seenIds.add(item.id);
+    if (seenIds.size > 5000) seenIds = new Set(items.map((item) => item.id));
+    for (const item of fresh.slice(0, 5)) showToast(item);
+  } catch {
+    // Keep the last badge when the dashboard cannot be reached.
+  }
+}
+
+function showToast(item) {
+  if (!Notification.isSupported()) return;
+  const toast = new Notification({
+    title: `[${item.vps}] ${item.title || item.app || 'Notification'}`,
+    body: item.body || '',
+    icon: path.join(__dirname, 'icon.png'),
+  });
+  activeToasts.add(toast);
+  toast.on('show', () => console.log(`[toast] ${toast.title}`));
+  toast.on('failed', (_event, error) => {
+    activeToasts.delete(toast);
+    console.error(`[toast] failed: ${error}`);
+  });
+  toast.on('close', () => activeToasts.delete(toast));
+  toast.on('click', () => {
+    showWindow();
+    toast.close();
+  });
+  toast.show();
+}
+
+function startPolling() {
+  pollDashboard();
+  pollTimer = setInterval(pollDashboard, POLL_MS);
+}
 
 function unreadTooltip(count) {
   if (!count) return 'Notification Dashboard';
@@ -97,6 +163,16 @@ function createWindow() {
   });
 
   win.loadURL(DASHBOARD_URL);
+  win.webContents.on('dom-ready', () => {
+    // The shell shows the Windows toast itself. Silence the page's own
+    // Notification so a new message does not appear twice.
+    win.webContents.executeJavaScript(`(() => {
+      function DesktopNotification() {}
+      DesktopNotification.permission = 'granted';
+      DesktopNotification.requestPermission = () => Promise.resolve('granted');
+      window.Notification = DesktopNotification;
+    })()`).catch(() => {});
+  });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -153,6 +229,11 @@ if (!gotLock) {
     installWindowsIdentity();
     createWindow();
     createTray();
+    startPolling();
+  });
+
+  app.on('before-quit', () => {
+    clearInterval(pollTimer);
   });
 
   app.on('window-all-closed', () => {
