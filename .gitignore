@@ -1,8 +1,11 @@
 .gitignore
 node_modules/
 .next/
+release/
 .vercel/
 data/
 .env
 .env*.local
 requirements.md
+.vercel
+.env*
