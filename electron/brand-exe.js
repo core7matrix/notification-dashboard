@@ -1,6 +1,7 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { hideWelcomeWindow } = require('./no-welcome');
 
 const exe = path.join(__dirname, '..', 'node_modules', 'electron', 'dist', 'electron.exe');
 const icon = path.join(__dirname, 'icon.ico');
@@ -18,6 +19,12 @@ function fileDescription() {
 }
 
 async function main() {
+  try {
+    hideWelcomeWindow();
+  } catch (err) {
+    console.error(err.message || err);
+  }
+
   const stamp = stampValue();
   if (fs.existsSync(stampPath) && fs.readFileSync(stampPath, 'utf8') === stamp) return;
 
