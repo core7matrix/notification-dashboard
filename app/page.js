@@ -676,7 +676,7 @@ function DbSettingsModal({ onClose, onChanged }) {
   const [error, setError] = useState('');
   const [info, setInfo] = useState(null);
   const [enabled, setEnabled] = useState(false);
-  const [removeAfter, setRemoveAfter] = useState('7d');
+  const [removeAfter, setRemoveAfter] = useState('6d');
   const [removeEvery, setRemoveEvery] = useState('1d');
   const [busy, setBusy] = useState('');
   const [confirmRun, setConfirmRun] = useState(false);

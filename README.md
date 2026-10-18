@@ -16,7 +16,7 @@ Live dashboard for notifications captured by browser extensions on VPS machines.
 - Mark messages read, delete one message, or clear a machine or the whole list.
 - Light and dark themes follow the system until you switch them.
 - Optional sound and desktop notifications for new messages (the Electron shell shows the Windows toast itself).
-- Database settings show the Neon plan and a schedule that deletes messages older than 1 hour, 6 hours, 1 day, or 7 days.
+- Database settings show the Neon plan and a schedule that deletes messages older than 1 to 6 days.
 
 ## Setup
 
@@ -43,7 +43,6 @@ Create a `.env.local` with:
 | `SENTRY_ORG` | for source maps | Sentry organization slug. Used at build time with `SENTRY_AUTH_TOKEN`. |
 | `SENTRY_PROJECT` | for source maps | Sentry project slug. |
 | `SENTRY_AUTH_TOKEN` | for source maps | Build token that uploads source maps. Keep it out of the client. |
-| `CRON_SECRET` | for the health cron | Vercel sends this as `Authorization: Bearer <CRON_SECRET>` when it calls the health check. |
 
 Tables are created on first use.
 
@@ -55,9 +54,7 @@ Open [http://localhost:3000](http://localhost:3000). `GET /healthz` reports whet
 
 ## Monitoring
 
-Crashes and API errors are sent to Sentry when `NEXT_PUBLIC_SENTRY_DSN` is set. The Electron shell reports a dashboard it cannot reach, and a window or helper process that crashes. Those reports are limited to one every 15 minutes.
-
-Vercel calls `GET /api/cron/health` every 10 minutes. That route runs the same check as `/healthz` and records a Sentry cron check-in named `dashboard-health`. A failed database or a missing ingest key fails the check-in and opens a Sentry issue. Set `CRON_SECRET` in the Vercel project so only Vercel can call it. On the Hobby plan, Vercel runs cron jobs once a day, so use a Pro plan or point a Sentry uptime monitor at `GET /healthz` if you need a tighter interval.
+Crashes and API errors are sent to Sentry when `NEXT_PUBLIC_SENTRY_DSN` is set. The Electron shell reports a dashboard it cannot reach, and a window or helper process that crashes. Those reports are limited to one every 15 minutes. `GET /healthz` reports whether the database and ingest key are configured.
 
 ## Ingest API
 
