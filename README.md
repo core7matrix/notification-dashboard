@@ -16,7 +16,7 @@ Live dashboard for notifications captured by browser extensions on VPS machines.
 - Mark messages read, delete one message, or clear a machine or the whole list.
 - Light and dark themes follow the system until you switch them.
 - Optional sound and desktop notifications for new messages (the Electron shell shows the Windows toast itself).
-- Database settings show the Neon plan and a schedule that deletes messages older than 1 hour, 6 hours, 1 day, or 7 days.
+- Database settings show the Neon plan and a schedule that deletes messages older than 1 to 6 days.
 
 ## Setup
 
