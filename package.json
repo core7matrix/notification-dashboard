@@ -9,8 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "electron": "node electron/brand-exe.js && electron .",
-    "dist": "electron-builder"
+    "electron": "node electron/brand-exe.js && node electron/write-dsn.js && electron .",
+    "dist": "node electron/write-dsn.js && electron-builder"
   },
   "build": {
     "appId": "com.notification.dashboard",
@@ -32,6 +32,8 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@sentry/electron": "^8.2.0",
+    "@sentry/nextjs": "^11.8.0",
     "next": "^16.3.6",
     "pusher": "^5.3.4",
     "pusher-js": "^8.6.0",

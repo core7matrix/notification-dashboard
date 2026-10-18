@@ -1,3 +1,4 @@
+const Sentry = require('./sentry');
 const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, session, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -43,6 +44,16 @@ let seenIds = null;
 let pollTimer;
 const activeToasts = new Set();
 const RECENT_MS = 10 * 60 * 1000;
+const REPORT_INTERVAL_MS = 15 * 60 * 1000;
+const lastReportAt = new Map();
+
+function reportOnce(key, error, tags) {
+  const now = Date.now();
+  if (now - (lastReportAt.get(key) || 0) < REPORT_INTERVAL_MS) return;
+  lastReportAt.set(key, now);
+  const event = error instanceof Error ? error : new Error(String(error));
+  Sentry.captureException(event, { tags, fingerprint: [key] });
+}
 
 async function pollDashboard() {
   try {
@@ -50,7 +61,14 @@ async function pollDashboard() {
       fetch(new URL('/api/vps', DASHBOARD_URL)),
       fetch(new URL('/api/notifications?limit=30', DASHBOARD_URL)),
     ]);
-    if (!vpsRes.ok || !noteRes.ok) return;
+    if (!vpsRes.ok || !noteRes.ok) {
+      reportOnce(
+        'electron-dashboard-poll',
+        `Dashboard poll failed (vps ${vpsRes.status}, notifications ${noteRes.status})`,
+        { source: 'electron-poll' },
+      );
+      return;
+    }
     const vps = await vpsRes.json();
     const notes = await noteRes.json();
     const unread = (vps.items || []).reduce((sum, item) => sum + (Number(item.unread) || 0), 0);
@@ -67,8 +85,9 @@ async function pollDashboard() {
     for (const item of items) if (item.id) seenIds.add(item.id);
     if (seenIds.size > 5000) seenIds = new Set(items.map((item) => item.id));
     for (const item of fresh.slice(0, 5)) showToast(item);
-  } catch {
+  } catch (err) {
     // Keep the last badge when the dashboard cannot be reached.
+    reportOnce('electron-dashboard-poll', err, { source: 'electron-poll' });
   }
 }
 
@@ -181,6 +200,9 @@ function createWindow() {
 
   win.webContents.on('did-fail-load', (_event, code, description, url) => {
     if (code === -3 || !url.startsWith('http')) return;
+    reportOnce('electron-dashboard-load', `Could not load the dashboard (${code}: ${description})`, {
+      source: 'electron-load',
+    });
     win.loadURL(offlinePage(description));
   });
 
@@ -214,6 +236,24 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', showWindow);
+
+  app.on('render-process-gone', (_event, _contents, details) => {
+    if (details.reason !== 'crashed' && details.reason !== 'oom') return;
+    Sentry.captureMessage(`Dashboard window ${details.reason}`, {
+      level: 'fatal',
+      extra: { reason: details.reason, exitCode: details.exitCode },
+      tags: { source: 'electron-renderer' },
+    });
+  });
+
+  app.on('child-process-gone', (_event, details) => {
+    if (details.reason !== 'crashed' && details.reason !== 'oom') return;
+    Sentry.captureMessage(`${details.type || 'Child'} process ${details.reason}`, {
+      level: 'fatal',
+      extra: { type: details.type, reason: details.reason, exitCode: details.exitCode },
+      tags: { source: 'electron-process' },
+    });
+  });
 
   ipcMain.on('unread-count', (_event, count) => {
     const n = Math.floor(Number(count));
