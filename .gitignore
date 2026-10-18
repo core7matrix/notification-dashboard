@@ -3,6 +3,7 @@ node_modules/
 .next/
 release/
 electron/.brand-stamp
+electron/sentry-dsn.js
 .vercel/
 data/
 .env
