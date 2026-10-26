@@ -1259,21 +1259,10 @@ button {
   min-width: 0;
 }
 
-.meta-text,
-.meta-item a {
+.meta-text {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.meta-item a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.meta-item a:hover {
-  color: var(--mn-accent);
-  text-decoration: underline;
 }
 
 .meta-icon {

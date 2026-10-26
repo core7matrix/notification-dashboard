@@ -1016,13 +1016,7 @@ function Item({ n, grouped, flash, onClick, onDelete }) {
           <div className="meta-line">
             <span className="meta-item" title="Page title">
               <PageIcon />
-              {n.url ? (
-                <a href={n.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                  {n.pageTitle}
-                </a>
-              ) : (
-                <span className="meta-text">{n.pageTitle}</span>
-              )}
+              <span className="meta-text">{n.pageTitle}</span>
             </span>
           </div>
         )}
