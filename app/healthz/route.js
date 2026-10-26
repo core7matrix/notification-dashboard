@@ -1,4 +1,4 @@
-import { databaseUrl, getDb } from '@/lib/db';
+import { databaseUrl, getDb, safeDbError } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +15,7 @@ export async function GET() {
   };
 
   let database = 'not configured';
+  let reason = null;
   if (env.MONGODB_URI) {
     try {
       const db = await getDb();
@@ -22,10 +23,11 @@ export async function GET() {
       database = 'ok';
     } catch (err) {
       console.error('Health check database error:', err);
-      database = 'connection failed (see Vercel logs)';
+      database = 'connection failed';
+      reason = safeDbError(err).message;
     }
   }
 
   const ok = env.MONGODB_URI && env.INGEST_API_KEY && database === 'ok';
-  return Response.json({ ok, env, database }, { status: ok ? 200 : 503 });
+  return Response.json({ ok, env, database, reason }, { status: ok ? 200 : 503 });
 }
