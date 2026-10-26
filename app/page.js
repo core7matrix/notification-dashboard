@@ -754,7 +754,7 @@ function DbSettingsModal({ onClose, onChanged }) {
 
   const afterLabel = REMOVE_AFTER.find((option) => option.id === removeAfter)?.label || 'the selected age';
   const status = info?.status || 'unknown';
-  const planLabel = status === 'free' ? 'Free' : status === 'paid' ? 'Paid' : 'Unknown';
+  const planLabel = info?.plan || (status === 'free' ? 'Free' : status === 'paid' ? 'Paid' : 'Unknown');
   const nextRun =
     info?.settings.enabled && info.settings.lastRunAt
       ? info.settings.lastRunAt + (REMOVE_EVERY.find((option) => option.id === info.settings.removeEvery)?.ms || 0)
@@ -775,7 +775,7 @@ function DbSettingsModal({ onClose, onChanged }) {
         <h2 id="db-modal-title" className="modal-title">
           Database
         </h2>
-        <p className="modal-message">Plan for the connected Neon database, and when old notifications are removed.</p>
+        <p className="modal-message">The connected MongoDB database, and when old notifications are removed.</p>
 
         {loading ? (
           <p className="db-note">Checking the database…</p>

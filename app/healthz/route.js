@@ -1,10 +1,10 @@
-import { getDb } from '@/lib/db';
+import { databaseUrl, getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const env = {
-    DATABASE_URL: Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL),
+    MONGODB_URI: Boolean(databaseUrl()),
     INGEST_API_KEY: Boolean(process.env.INGEST_API_KEY),
     PUSHER: Boolean(
       process.env.PUSHER_APP_ID &&
@@ -15,10 +15,10 @@ export async function GET() {
   };
 
   let database = 'not configured';
-  if (env.DATABASE_URL) {
+  if (env.MONGODB_URI) {
     try {
-      const sql = await getDb();
-      await sql`SELECT 1`;
+      const db = await getDb();
+      await db.command({ ping: 1 });
       database = 'ok';
     } catch (err) {
       console.error('Health check database error:', err);
@@ -26,6 +26,6 @@ export async function GET() {
     }
   }
 
-  const ok = env.DATABASE_URL && env.INGEST_API_KEY && database === 'ok';
+  const ok = env.MONGODB_URI && env.INGEST_API_KEY && database === 'ok';
   return Response.json({ ok, env, database }, { status: ok ? 200 : 503 });
 }

@@ -8,26 +8,22 @@ export async function GET(req) {
   const app = params.get('app') || null;
   const limit = Math.min(Number(params.get('limit')) || 500, maxNotifications());
 
-  const sql = await getDb();
-  await applyRemovalSchedule(sql);
-  const rows = await sql`
-    SELECT * FROM notifications
-    WHERE (${vps}::text IS NULL OR vps = ${vps})
-      AND (${app}::text IS NULL OR app = ${app})
-    ORDER BY seq DESC
-    LIMIT ${limit}`;
+  const db = await getDb();
+  await applyRemovalSchedule(db);
+  const rows = await db
+    .collection('notifications')
+    .find({ ...(vps && { vps }), ...(app && { app }) })
+    .sort({ seq: -1 })
+    .limit(limit)
+    .toArray();
   return Response.json({ items: rows.map(toNotification) });
 }
 
 export async function DELETE(req) {
   const vps = req.nextUrl.searchParams.get('vps') || null;
 
-  const sql = await getDb();
-  const [{ removed }] = await sql`
-    WITH deleted AS (
-      DELETE FROM notifications WHERE ${vps}::text IS NULL OR vps = ${vps} RETURNING 1
-    )
-    SELECT count(*)::int AS removed FROM deleted`;
-  await broadcast({ type: 'cleared', vps }, { type: 'vps', items: await summarizeVps(sql) });
+  const db = await getDb();
+  const { deletedCount: removed } = await db.collection('notifications').deleteMany(vps ? { vps } : {});
+  await broadcast({ type: 'cleared', vps }, { type: 'vps', items: await summarizeVps(db) });
   return Response.json({ ok: true, removed });
 }

@@ -7,10 +7,10 @@ export async function DELETE(req, { params }) {
   const { id } = await params;
   if (!UUID.test(id)) return Response.json({ error: 'Invalid id' }, { status: 400 });
 
-  const sql = await getDb();
-  const deleted = await sql`DELETE FROM notifications WHERE id = ${id}::uuid RETURNING id`;
-  if (deleted.length) {
-    await broadcast({ type: 'deleted', ids: [id] }, { type: 'vps', items: await summarizeVps(sql) });
+  const db = await getDb();
+  const { deletedCount } = await db.collection('notifications').deleteOne({ id: id.toLowerCase() });
+  if (deletedCount) {
+    await broadcast({ type: 'deleted', ids: [id] }, { type: 'vps', items: await summarizeVps(db) });
   }
-  return Response.json({ ok: true, removed: deleted.length });
+  return Response.json({ ok: true, removed: deletedCount });
 }

@@ -7,14 +7,14 @@ import {
   saveDbSettings,
   summarizeVps,
 } from '@/lib/db';
-import { databaseHost, getNeonPlan } from '@/lib/neon-plan';
+import { databaseHost, getDatabasePlan } from '@/lib/mongo-plan';
 import { broadcast } from '@/lib/pusher';
 import { afterOption, everyOption } from '@/lib/schedule';
 
 export const dynamic = 'force-dynamic';
 
-async function snapshot(sql, settings) {
-  const [plan, preview] = await Promise.all([getNeonPlan(), removalPreview(sql, settings.removeAfter)]);
+async function snapshot(db, settings) {
+  const [plan, preview] = await Promise.all([getDatabasePlan(db), removalPreview(db, settings.removeAfter)]);
   return {
     status: plan.status,
     plan: plan.plan,
@@ -27,9 +27,9 @@ async function snapshot(sql, settings) {
 }
 
 export async function GET() {
-  const sql = await getDb();
-  const { settings } = await applyRemovalSchedule(sql);
-  return Response.json(await snapshot(sql, settings));
+  const db = await getDb();
+  const { settings } = await applyRemovalSchedule(db);
+  return Response.json(await snapshot(db, settings));
 }
 
 export async function PUT(req) {
@@ -38,13 +38,13 @@ export async function PUT(req) {
     return Response.json({ error: 'Choose a valid removal schedule.' }, { status: 400 });
   }
 
-  const sql = await getDb();
-  const settings = await saveDbSettings(sql, {
+  const db = await getDb();
+  const settings = await saveDbSettings(db, {
     enabled: body.enabled,
     removeAfter: body.removeAfter,
     removeEvery: body.removeEvery,
   });
-  return Response.json(await snapshot(sql, settings));
+  return Response.json(await snapshot(db, settings));
 }
 
 export async function POST(req) {
@@ -53,9 +53,9 @@ export async function POST(req) {
     return Response.json({ error: 'Choose how old a notification must be before it is removed.' }, { status: 400 });
   }
 
-  const sql = await getDb();
-  const removed = await deleteOlderThan(sql, body.removeAfter);
-  if (removed) await broadcast({ type: 'sync' }, { type: 'vps', items: await summarizeVps(sql) });
-  const settings = await getDbSettings(sql);
-  return Response.json({ ...(await snapshot(sql, settings)), removed });
+  const db = await getDb();
+  const removed = await deleteOlderThan(db, body.removeAfter);
+  if (removed) await broadcast({ type: 'sync' }, { type: 'vps', items: await summarizeVps(db) });
+  const settings = await getDbSettings(db);
+  return Response.json({ ...(await snapshot(db, settings)), removed });
 }
